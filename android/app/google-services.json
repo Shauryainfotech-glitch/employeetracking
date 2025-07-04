@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1081249290403",
+    "project_id": "smart-employee-tracking",
+    "storage_bucket": "smart-employee-tracking.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1081249290403:android:f1a593d040fa57e67e8716",
+        "android_client_info": {
+          "package_name": "com.example.employee"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBj6P8E6o7bCtP-mFirpnumpPH8UjjBr_M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
