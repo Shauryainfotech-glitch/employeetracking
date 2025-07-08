@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 class HRAnalyticsScreen extends StatefulWidget {
@@ -40,10 +41,7 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
     if (employeesSnapshot.exists) {
       final employeesMap = employeesSnapshot.value as Map<dynamic, dynamic>;
       _employees = employeesMap.entries.map((entry) {
-        return {
-          'uid': entry.key,
-          ...Map<String, dynamic>.from(entry.value),
-        };
+        return {'uid': entry.key, ...Map<String, dynamic>.from(entry.value)};
       }).toList();
     }
 
@@ -57,7 +55,9 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
           userData.forEach((date, record) {
             DateTime parsedDate;
             try {
-              parsedDate = date is String ? DateTime.parse(date) : date.toDate();
+              parsedDate = date is String
+                  ? DateTime.parse(date)
+                  : date.toDate();
             } catch (e) {
               parsedDate = DateTime.now();
             }
@@ -84,9 +84,13 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
             try {
               // Handle both string and numeric timestamps
               if (timestamp is String) {
-                parsedTimestamp = DateTime.fromMillisecondsSinceEpoch(int.parse(timestamp));
+                parsedTimestamp = DateTime.fromMillisecondsSinceEpoch(
+                  int.parse(timestamp),
+                );
               } else if (timestamp is int) {
-                parsedTimestamp = DateTime.fromMillisecondsSinceEpoch(timestamp);
+                parsedTimestamp = DateTime.fromMillisecondsSinceEpoch(
+                  timestamp,
+                );
               } else {
                 parsedTimestamp = DateTime.now();
               }
@@ -122,7 +126,7 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 25.0, vertical: 16.0),
       child: Row(
         children: [
           Expanded(
@@ -147,60 +151,22 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
   Widget _buildFilters() {
     // Get unique departments from employees, handling null cases
     final departments = _employees
-        .map(
-          (e) => e['department']?.toString() ?? 'Unknown',
-        ) // Handle null department
+        .map((e) => e['department']?.toString() ?? 'Unknown')
         .toSet()
         .toList();
     departments.insert(0, 'All');
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: EdgeInsets.all(16),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton.icon(
-                    icon: Icon(Icons.calendar_today, size: 16),
-                    label: Text(
-                      '${DateFormat('MMM d').format(_dateRange.start)} - ${DateFormat('MMM d').format(_dateRange.end)}',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                    onPressed: () => _selectDateRange(context),
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _selectedDepartment,
-                    decoration: InputDecoration(
-                      labelText: 'Department',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12),
-                    ),
-                    items: departments.map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value),
-                      );
-                    }).toList(),
-                    onChanged: (String? value) {
-                      if (value != null) {
-                        setState(() => _selectedDepartment = value);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12),
-            ToggleButtons(
-              borderRadius: BorderRadius.circular(8),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return ToggleButtons(
+              borderRadius: BorderRadius.circular(12),
               isSelected: [
                 _selectedMetric == 'Attendance',
                 _selectedMetric == 'Location',
@@ -215,22 +181,54 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
                   ][index];
                 });
               },
+              selectedColor: Colors.white,
+              fillColor: Colors.indigoAccent,
+              color: Colors.black.withOpacity(0.6),
+              constraints: BoxConstraints(
+                minHeight: 58,
+                minWidth: (constraints.maxWidth - 32) / 3,
+                // Account for padding
+                maxWidth:
+                    (constraints.maxWidth - 32) /
+                    3, // Equal width for all buttons
+              ),
               children: [
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text('Attendance'),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.calendar_today, size: 18),
+                      SizedBox(width: 4),
+                      Text('Attendance'),
+                    ],
+                  ),
                 ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text('Location'),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.location_on, size: 18),
+                      SizedBox(width: 4),
+                      Text('Location'),
+                    ],
+                  ),
                 ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text('Productivity'),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.work, size: 18),
+                      SizedBox(width: 4),
+                      Text('Productivity'),
+                    ],
+                  ),
                 ),
               ],
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -243,77 +241,195 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
               .where((e) => e['department'] == _selectedDepartment)
               .toList();
 
+    final stats = _calculateAttendanceStats(filteredEmployees);
+
+    // Provide default values for null cases
+    final presentDays = stats['presentDays'] ?? 0;
+    final leaveDays = stats['leaveDays'] ?? 0;
+    final absentDays = stats['absentDays'] ?? 0;
+    final totalDays = stats['totalDays'] ?? 1; // Avoid division by zero
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+
+      child: SizedBox(
+        height: 150,
+
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: 4,
+          separatorBuilder: (context, index) =>
+              const SizedBox(width: 16, height: 200),
+          itemBuilder: (context, index) {
+            switch (index) {
+              case 0:
+                return _buildModernSummaryCard(
+                  title: 'Employees',
+                  value: filteredEmployees.length,
+                  icon: Icons.people_rounded,
+                  color: Colors.blueAccent,
+                  percentage: null,
+                );
+              case 1:
+                return _buildModernSummaryCard(
+                  title: 'Present',
+                  value: presentDays,
+                  icon: Icons.check_circle_rounded,
+                  color: Colors.greenAccent,
+                  percentage: (presentDays / totalDays) * 100,
+                );
+              case 2:
+                return _buildModernSummaryCard(
+                  title: 'On Leave',
+                  value: leaveDays,
+                  icon: Icons.beach_access_rounded,
+                  color: Colors.orangeAccent,
+                  percentage: (leaveDays / totalDays) * 100,
+                );
+              case 3:
+                return _buildModernSummaryCard(
+                  title: 'Absent',
+                  value: absentDays,
+                  icon: Icons.warning_rounded,
+                  color: Colors.redAccent,
+                  percentage: (absentDays / totalDays) * 100,
+                );
+              default:
+                return Container();
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernSummaryCard({
+    required String title,
+    required int value,
+    required IconData icon,
+    required Color color,
+    required double? percentage,
+  }) {
+    return GestureDetector(
+      onTap: () {
+        // Add interaction feedback
+        HapticFeedback.lightImpact();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        width: 160,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.2),
+              blurRadius: 10,
+              spreadRadius: 2,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, color: color, size: 24),
+                  ),
+                  if (percentage != null)
+                    Text(
+                      '${percentage.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value.toString(),
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    title,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+              if (percentage != null)
+                LinearProgressIndicator(
+                  value: percentage / 100,
+                  backgroundColor: color.withOpacity(0.2),
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                  minHeight: 4,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Map<String, int> _calculateAttendanceStats(
+    List<Map<String, dynamic>> employees,
+  ) {
     final filteredAttendance = _attendanceData.where((a) {
-      // Ensure the date is properly parsed as DateTime
       DateTime recordDate;
       try {
         recordDate = a['date'] is String
             ? DateTime.parse(a['date'])
             : a['date'] as DateTime;
       } catch (e) {
-        recordDate =
-            DateTime.now(); // Fallback to current date if parsing fails
+        recordDate = DateTime.now();
       }
 
-      return recordDate.isAfter(_dateRange.start) &&
-          recordDate.isBefore(_dateRange.end.add(Duration(days: 1))) &&
-          (_selectedDepartment == 'All' ||
-              (_employees.firstWhere(
-                    (e) => e['uid'] == a['userId'],
-                    orElse: () => {'department': ''},
-                  )['department'] ==
-                  _selectedDepartment));
+      final isInDateRange =
+          recordDate.isAfter(_dateRange.start) &&
+          recordDate.isBefore(_dateRange.end.add(const Duration(days: 1)));
+
+      if (!isInDateRange) return false;
+      if (_selectedDepartment == 'All') return true;
+
+      final employee = _employees.firstWhere(
+        (e) => e['uid'] == a['userId'],
+        orElse: () => {'department': ''},
+      );
+      return employee['department'] == _selectedDepartment;
     }).toList();
 
-    final presentDays = filteredAttendance
-        .where((a) => a['status'] == 'Present')
-        .length;
-    final leaveDays = filteredAttendance
-        .where((a) => a['status'] == 'On Leave')
-        .length;
-    final absentDays = filteredAttendance
-        .where((a) => a['status'] == 'Absent')
-        .length;
-    final totalDays = filteredEmployees.length * _dateRange.duration.inDays;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Row(
-        children: [
-          _buildSummaryCard(
-            'Employees',
-            filteredEmployees.length.toString(),
-            Colors.blue,
-            Icons.people,
-            totalDays: totalDays,
-          ),
-          SizedBox(width: 12),
-          _buildSummaryCard(
-            'Present',
-            presentDays.toString(),
-            Colors.green,
-            Icons.check_circle,
-            totalDays: totalDays,
-          ),
-          SizedBox(width: 12),
-          _buildSummaryCard(
-            'On Leave',
-            leaveDays.toString(),
-            Colors.orange,
-            Icons.beach_access,
-            totalDays: totalDays,
-          ),
-          SizedBox(width: 12),
-          _buildSummaryCard(
-            'Absent',
-            absentDays.toString(),
-            Colors.red,
-            Icons.warning,
-            totalDays: totalDays,
-          ),
-        ],
-      ),
-    );
+    return {
+      'presentDays': filteredAttendance
+          .where((a) => a['status'] == 'Present')
+          .length,
+      'leaveDays': filteredAttendance
+          .where((a) => a['status'] == 'On Leave')
+          .length,
+      'absentDays': filteredAttendance
+          .where((a) => a['status'] == 'Absent')
+          .length,
+      'totalDays': employees.length * _dateRange.duration.inDays,
+    };
   }
 
   Widget _buildSummaryCard(
@@ -415,7 +531,7 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
         barRods: [
           BarChartRodData(
             toY: (entry.value['Present'] ?? 0).toDouble(),
-            color: Colors.green,
+            color: Colors.indigoAccent,
           ),
           BarChartRodData(
             toY: (entry.value['On Leave'] ?? 0).toDouble(),
@@ -431,6 +547,7 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
 
     return Card(
       elevation: 2,
+      color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: EdgeInsets.all(16),
       child: Padding(
@@ -443,7 +560,7 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blueGrey[800],
+                color: Colors.black,
               ),
             ),
             SizedBox(height: 8),
@@ -497,7 +614,7 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
           recordTime.isBefore(_dateRange.end.add(Duration(days: 1)))) {
         locationByEmployee.update(
           record['userId'],
-              (value) => value + 1,
+          (value) => value + 1,
           ifAbsent: () => 1,
         );
       }
@@ -506,15 +623,11 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
     // Convert to chart data
     final chartData = locationByEmployee.entries.map((entry) {
       final employee = _employees.firstWhere(
-            (e) => e['uid'] == entry.key,
+        (e) => e['uid'] == entry.key,
         orElse: () => {'name': 'Unknown'},
       );
-      return {
-        'name': employee['name'],
-        'count': entry.value,
-      };
-    }).toList()
-      ..sort((a, b) => b['count'].compareTo(a['count']));
+      return {'name': employee['name'], 'count': entry.value};
+    }).toList()..sort((a, b) => b['count'].compareTo(a['count']));
 
     return Card(
       elevation: 2,
@@ -547,11 +660,16 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
                         showTitles: true,
                         getTitlesWidget: (value, meta) {
                           final index = value.toInt();
-                          if (index >= 0 && index < chartData.length && index % 2 == 0) {
+                          if (index >= 0 &&
+                              index < chartData.length &&
+                              index % 2 == 0) {
                             return Padding(
                               padding: const EdgeInsets.only(top: 8.0),
                               child: Text(
-                                chartData[index]['name'].toString().split(' ').first,
+                                chartData[index]['name']
+                                    .toString()
+                                    .split(' ')
+                                    .first,
                                 style: TextStyle(fontSize: 10),
                               ),
                             );
@@ -597,7 +715,9 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
       // Parse the date properly
       DateTime recordDate;
       try {
-        recordDate = record['date'] is String ? DateTime.parse(record['date']) : record['date'];
+        recordDate = record['date'] is String
+            ? DateTime.parse(record['date'])
+            : record['date'];
       } catch (e) {
         recordDate = DateTime.now(); // Fallback if parsing fails
       }
@@ -608,7 +728,7 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
         if (record['workingHours'] != null) {
           productivityByEmployee.update(
             record['userId'],
-                (value) => value + (record['workingHours'] ?? 0),
+            (value) => value + (record['workingHours'] ?? 0),
             ifAbsent: () => record['workingHours'] ?? 0,
           );
         }
@@ -618,7 +738,7 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
     // Convert to chart data
     final chartData = productivityByEmployee.entries.map((entry) {
       final employee = _employees.firstWhere(
-            (e) => e['uid'] == entry.key,
+        (e) => e['uid'] == entry.key,
         orElse: () => {'name': 'Unknown', 'department': ''},
       );
       return {
@@ -626,8 +746,7 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
         'department': employee['department'],
         'hours': entry.value,
       };
-    }).toList()
-      ..sort((a, b) => b['hours'].compareTo(a['hours']));
+    }).toList()..sort((a, b) => b['hours'].compareTo(a['hours']));
 
     return Card(
       elevation: 2,
@@ -660,11 +779,16 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
                         showTitles: true,
                         getTitlesWidget: (value, meta) {
                           final index = value.toInt();
-                          if (index >= 0 && index < chartData.length && index % 2 == 0) {
+                          if (index >= 0 &&
+                              index < chartData.length &&
+                              index % 2 == 0) {
                             return Padding(
                               padding: const EdgeInsets.only(top: 8.0),
                               child: Text(
-                                chartData[index]['name'].toString().split(' ').first,
+                                chartData[index]['name']
+                                    .toString()
+                                    .split(' ')
+                                    .first,
                                 style: TextStyle(fontSize: 10),
                               ),
                             );
@@ -709,7 +833,7 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Colors.deepPurpleAccent, Colors.purpleAccent],
+            colors: [Colors.indigoAccent, Colors.indigoAccent],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -735,7 +859,8 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
                       // App Logo/Title
                       Icon(Icons.analytics, size: 28, color: Colors.white),
                       SizedBox(width: 8),
-                      Flexible( // Makes title flexible
+                      Flexible(
+                        // Makes title flexible
                         child: Text(
                           'HR Insights',
                           style: TextStyle(
@@ -752,10 +877,15 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
                       Stack(
                         children: [
                           IconButton(
-                            icon: Icon(Icons.notifications_none, color: Colors.white),
+                            icon: Icon(
+                              Icons.notifications_none,
+                              color: Colors.white,
+                            ),
                             onPressed: () {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Notifications clicked')),
+                                SnackBar(
+                                  content: Text('Notifications clicked'),
+                                ),
                               );
                             },
                           ),
@@ -800,43 +930,53 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
                               Navigator.pushNamed(context, '/settings');
                               break;
                             case 'logout':
-                            // Handle logout
+                              // Handle logout
                               break;
                           }
                         },
-                        itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                          PopupMenuItem<String>(
-                            value: 'profile',
-                            child: Row(
-                              children: [
-                                Icon(Icons.person, color: Colors.deepPurpleAccent),
-                                SizedBox(width: 8),
-                                Text('My Profile'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem<String>(
-                            value: 'settings',
-                            child: Row(
-                              children: [
-                                Icon(Icons.settings, color: Colors.deepPurpleAccent),
-                                SizedBox(width: 8),
-                                Text('Settings'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuDivider(),
-                          PopupMenuItem<String>(
-                            value: 'logout',
-                            child: Row(
-                              children: [
-                                Icon(Icons.logout, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text('Logout', style: TextStyle(color: Colors.red)),
-                              ],
-                            ),
-                          ),
-                        ],
+                        itemBuilder: (BuildContext context) =>
+                            <PopupMenuEntry<String>>[
+                              PopupMenuItem<String>(
+                                value: 'profile',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.person,
+                                      color: Colors.deepPurpleAccent,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text('My Profile'),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'settings',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.settings,
+                                      color: Colors.deepPurpleAccent,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text('Settings'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              PopupMenuItem<String>(
+                                value: 'logout',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.logout, color: Colors.red),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Logout',
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                       ),
                     ],
                   ),
@@ -854,8 +994,13 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
                   child: TextField(
                     decoration: InputDecoration(
                       hintText: 'Search employees...',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.7)),
+                      hintStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        color: Colors.white.withOpacity(0.7),
+                      ),
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.symmetric(vertical: 8),
                     ),
@@ -873,6 +1018,7 @@ class _HRAnalyticsScreenState extends State<HRAnalyticsScreen> {
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

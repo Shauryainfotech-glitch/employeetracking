@@ -24,14 +24,23 @@ class _TrackingPageState extends State<TrackingPage> with SingleTickerProviderSt
 
   // Firebase Variables
   final _database = FirebaseDatabase.instanceFor(
-  app: FirebaseDatabase.instance.app,
-  databaseURL: 'https://smart-employee-tracking-default-rtdb.asia-southeast1.firebasedatabase.app',
+    app: FirebaseDatabase.instance.app,
+    databaseURL: 'https://smart-employee-tracking-default-rtdb.asia-southeast1.firebasedatabase.app',
   ).ref();
   final User? _user = FirebaseAuth.instance.currentUser;
 
   // Device Metrics
   double _batteryLevel = 0.85;
   double _speed = 0.0;
+
+  // Check-in/Check-out Variables
+  bool _isCheckedIn = false;
+  bool _alreadyCheckedOutToday = false;
+  DateTime? _checkInTime;
+  DateTime? _checkOutTime;
+  Duration _todayDuration = Duration.zero;
+  Map<String, dynamic>? _checkInLocation;
+  Map<String, dynamic>? _checkOutLocation;
 
   @override
   void initState() {
@@ -42,6 +51,36 @@ class _TrackingPageState extends State<TrackingPage> with SingleTickerProviderSt
       duration: Duration(milliseconds: 500),
     );
     _getCurrentLocation();
+    _loadTodayData();
+  }
+
+  Future<void> _loadTodayData() async {
+    if (_user == null) return;
+
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final snapshot = await _database
+        .child('employee_attendance')
+        .child(_user!.uid)
+        .child(today)
+        .once();
+
+    if (snapshot.snapshot.value != null) {
+      final data = Map<String, dynamic>.from(snapshot.snapshot.value as Map);
+      setState(() {
+        _isCheckedIn = data['check_out_time'] == null;
+        _alreadyCheckedOutToday = data['check_out_time'] != null;
+        _checkInTime = DateTime.parse(data['check_in_time']);
+        _checkInLocation = data['check_in_location'];
+
+        if (data['check_out_time'] != null) {
+          _checkOutTime = DateTime.parse(data['check_out_time']);
+          _checkOutLocation = data['check_out_location'];
+          _todayDuration = _checkOutTime!.difference(_checkInTime!);
+        } else {
+          _todayDuration = DateTime.now().difference(_checkInTime!);
+        }
+      });
+    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -87,127 +126,211 @@ class _TrackingPageState extends State<TrackingPage> with SingleTickerProviderSt
     }
   }
 
-  void _toggleTracking() {
-    setState(() {
-      _isTracking = !_isTracking;
-      if (_isTracking) {
-        _animationController.repeat(reverse: true);
-        _startLocationUpdates();
-      } else {
-        _animationController.stop();
-      }
-    });
-  }
+  Future<Map<String, dynamic>> _getLocationData() async {
+    if (_currentPosition == null) return {};
 
-  void _startLocationUpdates() {
-    final locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.best,
-      distanceFilter: 10, // meters
+    // Create default placemark
+    geo.Placemark placemark = geo.Placemark(
+      street: 'Unknown street',
+      subLocality: 'Unknown area',
+      locality: 'Unknown city',
+      administrativeArea: 'Unknown state',
+      country: 'Unknown country',
+      postalCode: 'Unknown postal code',
     );
 
-    Geolocator.getPositionStream(locationSettings: locationSettings).listen((Position position) {
-      if (!_isTracking) return;
-
-      setState(() {
-        _currentPosition = position;
-        _routePoints.add(LatLng(position.latitude, position.longitude));
-        _speed = position.speed;
-      });
-
-      _mapController.move(
-        LatLng(position.latitude, position.longitude),
-        _zoom,
+    // Try to get actual location if plugin is available
+    try {
+      final placemarks = await geo.placemarkFromCoordinates(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
       );
-    });
+      if (placemarks.isNotEmpty) {
+        placemark = placemarks.first;
+      }
+    } catch (e) {
+      print('Geocoding error: $e');
+      // Continue with default placemark values
+    }
+
+    final now = DateTime.now();
+    return {
+      'timestamp': now.millisecondsSinceEpoch,
+      'date': DateFormat('yyyy-MM-dd').format(now),
+      'time': DateFormat('HH:mm:ss').format(now),
+      'coordinates': {
+        'latitude': _currentPosition!.latitude,
+        'longitude': _currentPosition!.longitude,
+        'accuracy': _currentPosition!.accuracy,
+        'altitude': _currentPosition!.altitude,
+        'speed': _currentPosition!.speed,
+      },
+      'location': {
+        'address': placemark.street ?? 'Unknown street',
+        'area': placemark.subLocality ?? placemark.locality ?? 'Unknown area',
+        'city': placemark.locality ?? 'Unknown city',
+        'state': placemark.administrativeArea ?? 'Unknown state',
+        'country': placemark.country ?? 'Unknown country',
+        'postalCode': placemark.postalCode ?? 'Unknown postal code',
+      },
+      'device': {
+        'battery': _batteryLevel,
+        'speed': _speed,
+      },
+    };
   }
 
-  Future<void> _sendLocationToFirebase() async {
-    if (_currentPosition == null || _user == null) return;
+  Future<void> _checkIn() async {
+    if (_user == null || _currentPosition == null) return;
 
     try {
-      // Create default placemark
-      geo.Placemark placemark = geo.Placemark(
-        street: 'Unknown street',
-        subLocality: 'Unknown area',
-        locality: 'Unknown city',
-        administrativeArea: 'Unknown state',
-        country: 'Unknown country',
-        postalCode: 'Unknown postal code',
-      );
-
-      // Try to get actual location if plugin is available
-      try {
-        final placemarks = await geo.placemarkFromCoordinates(
-          _currentPosition!.latitude,
-          _currentPosition!.longitude,
-        );
-        if (placemarks.isNotEmpty) {
-          placemark = placemarks.first;
-        }
-      } catch (e) {
-        print('Geocoding error: $e');
-        // Continue with default placemark values
-      }
-
-      // Create location data
+      final locationData = await _getLocationData();
       final now = DateTime.now();
-      final locationData = {
-        'timestamp': now.millisecondsSinceEpoch,
-        'date': DateFormat('yyyy-MM-dd').format(now),
-        'time': DateFormat('HH:mm:ss').format(now),
-        'coordinates': {
-          'latitude': _currentPosition!.latitude,
-          'longitude': _currentPosition!.longitude,
-          'accuracy': _currentPosition!.accuracy,
-          'altitude': _currentPosition!.altitude,
-          'speed': _currentPosition!.speed,
-        },
+      final today = DateFormat('yyyy-MM-dd').format(now);
+
+      await _database
+          .child('employee_attendance')
+          .child(_user!.uid)
+          .child(today)
+          .set({
+        'check_in_time': now.toIso8601String(),
+        'check_in_location': locationData,
         'user': {
           'uid': _user!.uid,
           'name': _user!.displayName ?? 'Unknown',
           'email': _user!.email ?? 'No email',
           'phone': _user!.phoneNumber ?? 'No phone',
         },
-        'location': {
-          'address': placemark.street ?? 'Unknown street',
-          'area': placemark.subLocality ?? placemark.locality ?? 'Unknown area',
-          'city': placemark.locality ?? 'Unknown city',
-          'state': placemark.administrativeArea ?? 'Unknown state',
-          'country': placemark.country ?? 'Unknown country',
-          'postalCode': placemark.postalCode ?? 'Unknown postal code',
-        },
-        'device': {
-          'battery': _batteryLevel,
-          'speed': _speed,
-        },
-      };
+      });
 
-      // Save to Firebase
-      await _database
-          .child('employee_locations')
-          .child(_user!.uid)
-          .child(now.millisecondsSinceEpoch.toString())
-          .set(locationData);
+      setState(() {
+        _isCheckedIn = true;
+        _alreadyCheckedOutToday = false;
+        _checkInTime = now;
+        _checkOutTime = null;
+        _checkInLocation = locationData;
+        _checkOutLocation = null;
+        _todayDuration = Duration.zero;
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Location saved successfully!'),
+          content: Text('Checked in successfully!'),
           behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (e) {
-      print('Failed to save location: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to save location: ${e.toString()}'),
+          content: Text('Failed to check in: ${e.toString()}'),
           behavior: SnackBarBehavior.floating,
         ),
       );
     }
   }
 
+  Future<void> _checkOut() async {
+    if (_user == null || _currentPosition == null || !_isCheckedIn) return;
+
+    try {
+      final locationData = await _getLocationData();
+      final now = DateTime.now();
+      final today = DateFormat('yyyy-MM-dd').format(now);
+      final duration = now.difference(_checkInTime!);
+
+      await _database
+          .child('employee_attendance')
+          .child(_user!.uid)
+          .child(today)
+          .update({
+        'check_out_time': now.toIso8601String(),
+        'check_out_location': locationData,
+        'total_hours': duration.inHours + (duration.inMinutes % 60) / 60,
+        'status': duration.inHours >= 8 ? 'completed' : 'incomplete',
+      });
+
+      setState(() {
+        _isCheckedIn = false;
+        _alreadyCheckedOutToday = true;
+        _checkOutTime = now;
+        _checkOutLocation = locationData;
+        _todayDuration = duration;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Checked out successfully!'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to check out: ${e.toString()}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _showLocationDetails(bool isCheckIn) {
+    final locationData = isCheckIn ? _checkInLocation : _checkOutLocation;
+    if (locationData == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isCheckIn ? 'Check-in Location' : 'Check-out Location'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildLocationDetailItem('Date', locationData['date']),
+              _buildLocationDetailItem('Time', locationData['time']),
+              _buildLocationDetailItem('Address', locationData['location']['address']),
+              _buildLocationDetailItem('Area', locationData['location']['area']),
+              _buildLocationDetailItem('City', locationData['location']['city']),
+              _buildLocationDetailItem('State', locationData['location']['state']),
+              _buildLocationDetailItem('Country', locationData['location']['country']),
+              _buildLocationDetailItem('Postal Code', locationData['location']['postalCode']),
+              SizedBox(height: 10),
+              Text('Coordinates:', style: TextStyle(fontWeight: FontWeight.bold)),
+              _buildLocationDetailItem('Latitude', locationData['coordinates']['latitude'].toString()),
+              _buildLocationDetailItem('Longitude', locationData['coordinates']['longitude'].toString()),
+              _buildLocationDetailItem('Accuracy', '${locationData['coordinates']['accuracy']} meters'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('CLOSE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationDetailItem(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$label: ', style: TextStyle(fontWeight: FontWeight.bold)),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final hours = _todayDuration.inHours;
+    final minutes = _todayDuration.inMinutes % 60;
+    final progressColor = _todayDuration.inHours >= 8 ? Colors.green : Colors.red;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -224,11 +347,44 @@ class _TrackingPageState extends State<TrackingPage> with SingleTickerProviderSt
 
           // Stats Panel
           Positioned(
-            bottom: MediaQuery.of(context).padding.bottom + 180,
+            bottom: MediaQuery.of(context).padding.bottom + (_alreadyCheckedOutToday ? 180 : 220),
             left: 16,
             right: 16,
-            child: _buildStatsPanel(),
+            child: _buildStatsPanel(progressColor, hours, minutes),
           ),
+
+          // Location Details Buttons (only when checked in or out)
+          if (_checkInTime != null || _checkOutTime != null)
+            Positioned(
+              bottom: MediaQuery.of(context).padding.bottom + 180,
+              left: 16,
+              right: 16,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  if (_checkInLocation != null)
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.login, size: 16),
+                      label: Text('CHECK-IN LOCATION'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue[700],
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => _showLocationDetails(true),
+                    ),
+                  if (_checkOutLocation != null)
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.logout, size: 16),
+                      label: Text('CHECK-OUT LOCATION'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange[700],
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => _showLocationDetails(false),
+                    ),
+                ],
+              ),
+            ),
 
           // Tracking Button
           Positioned(
@@ -237,12 +393,12 @@ class _TrackingPageState extends State<TrackingPage> with SingleTickerProviderSt
             child: _buildTrackingButton(),
           ),
 
-          // Send Location Button
+          // Check-in/Check-out Button
           Positioned(
             bottom: MediaQuery.of(context).padding.bottom + 16,
             left: 16,
             right: 16,
-            child: _buildSendLocationButton(),
+            child: _buildCheckInOutButton(),
           ),
         ],
       ),
@@ -346,7 +502,7 @@ class _TrackingPageState extends State<TrackingPage> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildStatsPanel() {
+  Widget _buildStatsPanel(Color progressColor, int hours, int minutes) {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
@@ -361,11 +517,44 @@ class _TrackingPageState extends State<TrackingPage> with SingleTickerProviderSt
               children: [
                 _buildStatItem('Speed', '${_speed.toStringAsFixed(1)} km/h', Icons.speed),
                 _buildStatItem('Accuracy', '${_currentPosition?.accuracy?.toStringAsFixed(1) ?? '0'} m', Icons.abc),
-                _buildStatItem('Battery', '${(_batteryLevel * 100).toStringAsFixed(0)}%', Icons.battery_std),
+                _buildStatItem('Today', '$hours h $minutes m', Icons.timer),
               ],
             ),
-            SizedBox(height: 30),
-            _buildBatteryGauge(),
+            SizedBox(height: 16),
+            LinearProgressIndicator(
+              value: _todayDuration.inMinutes / (8 * 60),
+              minHeight: 10,
+              backgroundColor: Colors.grey[200],
+              valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Today\'s Progress',
+              style: TextStyle(fontSize: 12),
+            ),
+            SizedBox(height: 8),
+            if (_checkInTime != null)
+              Text(
+                'Checked in: ${DateFormat('HH:mm').format(_checkInTime!)}',
+                style: TextStyle(fontSize: 12),
+              ),
+            if (_checkOutTime != null)
+              Text(
+                'Checked out: ${DateFormat('HH:mm').format(_checkOutTime!)}',
+                style: TextStyle(fontSize: 12),
+              ),
+            if (_alreadyCheckedOutToday)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'You have already checked out today',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -388,50 +577,38 @@ class _TrackingPageState extends State<TrackingPage> with SingleTickerProviderSt
       ],
     );
   }
+  void _toggleTracking() {
+    setState(() {
+      _isTracking = !_isTracking;
+      if (_isTracking) {
+        _animationController.repeat(reverse: true);
+        _startLocationUpdates();
+      } else {
+        _animationController.stop();
+      }
+    });
+  }
 
-  Widget _buildBatteryGauge() {
-    return SizedBox(
-      height: 100,
-      child: SfLinearGauge(
-        minimum: 0,
-        maximum: 100,
-        interval: 25,
-        orientation: LinearGaugeOrientation.horizontal,
-        ranges: [
-          LinearGaugeRange(
-            startValue: 0,
-            endValue: 20,
-            color: Colors.red,
-          ),
-          LinearGaugeRange(
-            startValue: 20,
-            endValue: 50,
-            color: Colors.orange,
-          ),
-          LinearGaugeRange(
-            startValue: 50,
-            endValue: 100,
-            color: Colors.green,
-          ),
-        ],
-        markerPointers: [
-          LinearShapePointer(
-            value: _batteryLevel * 100,
-            height: 15,
-            width: 15,
-            shapeType: LinearShapePointerType.diamond,
-          )
-        ],
-        barPointers: [
-          LinearBarPointer(
-            value: _batteryLevel * 100,
-            thickness: 10,
-            color: Colors.transparent,
-            edgeStyle: LinearEdgeStyle.bothFlat,
-          )
-        ],
-      ),
+  void _startLocationUpdates() {
+    final locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.best,
+      distanceFilter: 10, // meters
     );
+
+    Geolocator.getPositionStream(locationSettings: locationSettings).listen((Position position) {
+      if (!_isTracking) return;
+
+      setState(() {
+        _currentPosition = position;
+        _routePoints.add(LatLng(position.latitude, position.longitude));
+        _speed = position.speed;
+      });
+
+      _mapController.move(
+        LatLng(position.latitude, position.longitude),
+        _zoom,
+      );
+    });
   }
 
   Widget _buildTrackingButton() {
@@ -445,19 +622,44 @@ class _TrackingPageState extends State<TrackingPage> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildSendLocationButton() {
+  Widget _buildCheckInOutButton() {
+    if (_alreadyCheckedOutToday) {
+      return ElevatedButton.icon(
+        icon: Icon(Icons.done_all, size: 20),
+        label: Text('ALREADY CHECKED OUT TODAY'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.grey,
+          foregroundColor: Colors.white,
+          padding: EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onPressed: null, // Disabled button
+      );
+    }
+
     return ElevatedButton.icon(
-      icon: Icon(Icons.send, size: 20),
-      label: Text('SEND LOCATION'),
+      icon: Icon(
+        _isCheckedIn ? Icons.logout : Icons.login,
+        size: 20,
+      ),
+      label: Text(_isCheckedIn ? 'CHECK OUT' : 'CHECK IN'),
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blue,
+        backgroundColor: _isCheckedIn ? Colors.red : Colors.green,
         foregroundColor: Colors.white,
         padding: EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
       ),
-      onPressed: _sendLocationToFirebase,
+      onPressed: () {
+        if (_isCheckedIn) {
+          _checkOut();
+        } else {
+          _checkIn();
+        }
+      },
     );
   }
 
